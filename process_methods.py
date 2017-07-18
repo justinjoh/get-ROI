@@ -5,38 +5,59 @@ import sys
 import os
 import cv2
 import numpy as np
+from cleanup_methods import cleanup
 
-def get_lines(grayimg):
+
+def get_lines(grayimg, num_chambers):
     """ Return a list of lines, i.e. 4-tuples in the form:
     (x1, y1, x2, y2)
     General form from:
     http://opencv-python-tutroals.readthedocs.io/en/latest/
     py_tutorials/py_imgproc/py_houghlines/py_houghlines.html
     """
-
-    edges = cv2.Canny(grayimg, 15, 45)  # Change these params, or create auto-method
-    lines = cv2.Houghlines(edges, 1, np.pi/180, 200)  # May need to change params
+    # TODO need a method that will discard lines that don't fit with the others
+    edges = cv2.Canny(grayimg, 40, 120)  # Change these params, or create auto-method
+    hough_param = 220
     lines_list = []
-    for i in len(lines):
-        for rho, theta in lines[i]:
-            a = np.cos(theta)
-            b = np.sin(theta)
-            a = np.cos(theta)
-            b = np.sin(theta)
-            x0 = a * rho
-            y0 = b * rho
-            x1 = int(x0 + 10000 * (-b))
-            y1 = int(y0 + 10000 * (a))
-            x2 = int(x0 - 10000 * (-b))
-            y2 = int(y0 - 10000 * (a))
-        line = (x1, y1, x2, y2)
-        lines_list.append(line)
-    print("Found " + len(lines_list) + " lines")
-    return lines_list
+    # Keep calling with less-restrictive hough_param until get the correct number of chamber lines
+    while len(lines_list) < num_chambers*2+1:
+        lines_list = []  # start list over
+        lines = cv2.HoughLines(edges, 1, np.pi/180, hough_param)
+
+        for i in range(len(lines)):
+            for rho, theta in lines[i]:
+                a = np.cos(theta)
+                b = np.sin(theta)
+                a = np.cos(theta)
+                b = np.sin(theta)
+                x0 = a * rho
+                y0 = b * rho
+                x1 = int(x0 + 10000 * (-b))
+                y1 = int(y0 + 10000 * (a))
+                x2 = int(x0 - 10000 * (-b))
+                y2 = int(y0 - 10000 * (a))
+
+                # cv2.line(grayimg, (x1, y1), (x2, y2), (255, 0, 0), 2)
+            line = (x1, y1, x2, y2)
+            print(str(float(slope(line))))
+            if len(lines_list) == 0:
+                lines_list.append(line)
+            if len(lines_list) == 2:
+                pass
+
+            if len(lines_list) > 0 and ((slope(line))-(slope(lines_list[i-1]))) <= 1:
+                lines_list.append(line)
+        hough_param += -1
+
+    for i in range(len(lines_list)):
+        cur_line = lines_list[i]
+        x1 = cur_line[0]; y1 = cur_line[1]; x2 = cur_line[2]; y2 = cur_line[3]
+        cv2.line(grayimg, (x1, y1), (x2, y2), (255, 0, 0), 0)
 
 
 def with_most_orth(lines_list):
-    """ Return the line in lines_list that is perp to the greatest number of lines
+    """ Might not actually need this for anything
+    Return the line in lines_list that is perp to the greatest number of lines
     in the list
     Known uses: find the line parallel to the flow chamber """
     best_index = 0
@@ -66,24 +87,24 @@ def are_orth(l1, l2):
 
 def slope(l):
     """ Return the slope of line. If vertical, return infinity """
-    if l[1] == l[0]:
+    if l[2] == l[0]:
         return float("inf")
     else:
-        return (l[3]-l[2])/(l[1]-l[0])
+        return float(l[3]-l[1])/float(l[2]-l[0])
 
-def get_rect(b, s1, s2):
-    """ Precondition: b, s1, s2 are such that
-    b is perp to s1, s2 (i.e. are_orth)
-    s1
-    -------------
-     b  |
-        |
-    -------------
-    s2
-    Will return the longest possible rectangular region that appears to contain cells
-    "longest possible" => cuts off at end of image
-    "appears to contain cells" => extends to the side of b where there is variance in
-        the intensity above some threshold
-    """
+
+def get_rect(image, l1, l2):
+    """ Might not actually need this in the current form: first want to rotate entire image
+    to the right angle
+    Precondition: l1 and l2 do actually correspond to a desired ROI"""
+    # First, create largest possible rectangle -> np matrix
+    # Apply Hough line transform to this
+    #   Use this new line to
 
     pass
+
+
+def showImage(image):
+    cv2.imshow('showImage', image)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
