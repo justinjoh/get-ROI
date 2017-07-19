@@ -1,12 +1,12 @@
 """ Contains the methods necessary to process one image,
 i.e. image --> rectangular ROI
 Main usage is in trim.process_single """
-import sys
-import os
+# import sys
+# import os
 import cv2
 import numpy as np
 import math
-from cleanup_methods import cleanup
+# from cleanup_methods import cleanup
 
 
 def get_lines(grayimg, num_chambers):
@@ -16,40 +16,81 @@ def get_lines(grayimg, num_chambers):
     http://opencv-python-tutroals.readthedocs.io/en/latest/
     py_tutorials/py_imgproc/py_houghlines/py_houghlines.html
     """
-    # TODO apply a blurring-type filter first
+    # TODO
+    #   make sure that lines are not too close: get order of magnitude
+    #   by dividing by num of channels in the correct direction
+
+    # Blur to reduce influence of lines between cells, then get edges
     blurred_grayimg = cv2.medianBlur(grayimg, 5)
     blurred_grayimg = cv2.medianBlur(blurred_grayimg, 5)
-    showImage(blurred_grayimg)
+    blurred_grayimg = cv2.medianBlur(blurred_grayimg, 5)
     edges = cv2.Canny(blurred_grayimg, 40, 120)  # Change these params, or create auto-method
+
     hough_param = 220
     lines_list = []
     # Keep calling with less-restrictive hough_param until get the correct number of chamber lines
     while len(lines_list) < num_chambers*2:
         lines_list = []  # start list over
-        lines = cv2.HoughLines(edges, 1, np.pi/180, hough_param) # find all lines with relaxed param
+        lines = cv2.HoughLines(edges, 1, np.pi/180, hough_param)  # find all lines with relaxed param
         try:
             for i in range(len(lines)):
                 for rho, theta in lines[i]:
-                    a = np.cos(theta); b = np.sin(theta)
-                    x0 = a * rho; y0 = b * rho
-                    x1 = int(x0 + 10000 * (-b)); y1 = int(y0 + 10000 * (a))
-                    x2 = int(x0 - 10000 * (-b)); y2 = int(y0 - 10000 * (a))
-
+                    a = np.cos(theta)
+                    b = np.sin(theta)
+                    x0 = a * rho
+                    y0 = b * rho
+                    x1 = int(x0 + 10000 * (-b))
+                    y1 = int(y0 + 10000 * a)
+                    x2 = int(x0 - 10000 * (-b))
+                    y2 = int(y0 - 10000 * a)
                     # cv2.line(grayimg, (x1, y1), (x2, y2), (255, 0, 0), 2)
-                line = (x1, y1, x2, y2)
+                    line = (x1, y1, x2, y2)
+
+                # Always append the "strongest" line as a starting point, will be found first
                 if len(lines_list) == 0:  # Always append the "strongest" line, which is found first
                     lines_list.append(line)
 
-                elif len(lines_list) > 0 and ((slope(line))-(slope(lines_list[-1]))) <= 1:
-                    lines_list.append(line)
+                # There is at least one line in the list
+                # Check for similar slope before trying to add a line
+                elif len(lines_list) > 0 and ((slope(line))-(slope(lines_list[0]))) <= 1:
+                    # TODO find correct distance here, based on the first line
+                    if math.atan(slope(lines_list[0])) > 1:
+                        min_dist = np.shape(grayimg)[0]/(num_chambers*4)
+                    else:
+                        min_dist = np.shape(grayimg)[1]/(num_chambers*4)
+                    # TODO currently adding to ensure that not adding another line in basically same place
+                    # Perform check against all lines already in list
+                    line_not_duplicate = True
+                    for lprev in lines_list:
+                        # Perform check of line against lprev
+                        # Heuristic: dist between midpts of segment should be greater than min_dist (specified above)
+                        p_line = ((line[0]+line[2])/2, (line[1]+line[3])/2)
+                        p_lprev = ((lprev[0]+lprev[2])/2, (lprev[1]+lprev[3])/2)
+                        dist = math.sqrt((p_line[0]-p_lprev[0])**2 + (p_line[1]-p_lprev[1])**2)
+                        if dist >= min_dist:
+                            # fine against this line
+                            pass
+                        else:
+                            line_not_duplicate = False
+                            break
+                    if line_not_duplicate:
+                        lines_list.append(line)
+                    else:
+                        print("found duplicate")
+                        # The line is basically on top of some other line, does not denote a unique boundary
+                        pass
 
         except Exception as e:
             print (e)
         hough_param += -2
+
     # This block just displays the image with lines
     for i in range(len(lines_list)):
         cur_line = lines_list[i]
-        x1 = cur_line[0]; y1 = cur_line[1]; x2 = cur_line[2]; y2 = cur_line[3]
+        x1 = cur_line[0]
+        y1 = cur_line[1]
+        x2 = cur_line[2]
+        y2 = cur_line[3]
         cv2.line(grayimg, (x1, y1), (x2, y2), (255, 255, 0), 1)
     return lines_list
 
@@ -99,7 +140,7 @@ def rotate_to_vert(image, lines_list):
     return rotated
 
 
-def get_first_column(vert_img, l_L, l_R):
+def get_first_column(vert_img):
     """ vert_img is properly oriented, l_L and l_R are left and right bounds of a channel
     Return the longest possible (along axis of l1 and l2) numpy matrix (extends past
     the longitudinal bounds of the channel, but is not wider than the channel
@@ -108,7 +149,8 @@ def get_first_column(vert_img, l_L, l_R):
     vert_lines = get_lines(vert_img, 5)  # Transforming old x-coords would be messy
     sorted_vert = sort_by_xpos(vert_lines)  # Now have list of left-to-right sorted vertical lines
     showImage(vert_img)
-    lL = sorted_vert[0]; lR = sorted_vert[1]
+    lL = sorted_vert[0]
+    lR = sorted_vert[1]
     lx = (float(lL[0]) + float(lL[2]))/2
     rx = (float(lR[0]) + float(lR[2]))/2
     print("lx: " + str(lx))
@@ -120,7 +162,9 @@ def get_first_column(vert_img, l_L, l_R):
         print("showing column from get_first_column")
         print("------- vert_lines " + str(vert_lines))
         showImage(column)
-    except Exception as e:
+
+    except TypeError as e:
+        print(e)
         column = vert_img[:, rx:lx]  # [y1:y2, x1:x2]
         print("showing column from get_first_column")
         print("------- vert_lines " + str(vert_lines))
@@ -128,9 +172,13 @@ def get_first_column(vert_img, l_L, l_R):
     return column
 
 
-def get_rect_from_column(column):
+def get_rect_from_column():
     """ Input: column, e.g. from get_column
     Return the column, but cropped at the dead end of the column. """
+    # TODO significant work needed with image processing
+    # Image processing stuff will involve finding gradient in longitudinal direction of the column and
+    #
+    raise NotImplementedError
     pass
 
 
