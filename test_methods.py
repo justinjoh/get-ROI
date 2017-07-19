@@ -12,17 +12,10 @@ if __name__ == '__main__':
 
         f = cv2.imread(img_name, cv2.IMREAD_GRAYSCALE)
         lines_list = get_lines(f, num_chambers=5)
-        # showImage(f)
+        showImage(f)
+        xsorted = sort_by_xpos(lines_list)
         rotated = rotate_to_vert(cv2.imread(img_name, cv2.IMREAD_GRAYSCALE), lines_list)
-        showImage(rotated)
-
-#        test_list = get_lines(f, num_chambers=10)
-#        showImage()
-
-        # At this point, image is properly oriented.
-        #    Can do hough line again to get exact vertical slice coordinates
-        # Something here to get individual numpy matrices
-        # Need to figure out where to slice horizontally, in each numpy matrix
+        (get_first_column(rotated, xsorted[0], xsorted[1]))
 
     pass
 
