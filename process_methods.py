@@ -58,8 +58,7 @@ def get_lines(grayimg, num_chambers):
                         min_dist = np.shape(grayimg)[0]/(num_chambers*4)
                     else:
                         min_dist = np.shape(grayimg)[1]/(num_chambers*4)
-                    # TODO currently adding to ensure that not adding another line in basically same place
-                    # Perform check against all lines already in list
+                    # Perform duplicate check against all lines already in list
                     line_not_duplicate = True
                     for lprev in lines_list:
                         # Perform check of line against lprev
@@ -76,15 +75,15 @@ def get_lines(grayimg, num_chambers):
                     if line_not_duplicate:
                         lines_list.append(line)
                     else:
+                        # The line is almost the same of some other line, does not denote a unique boundary
                         print("found duplicate")
-                        # The line is basically on top of some other line, does not denote a unique boundary
                         pass
-
         except Exception as e:
             print (e)
+        # Relax the parameter used for hough transform (Will cycle again thru "while" if didn't find enough lines)
         hough_param += -2
 
-    # This block just displays the image with lines
+    # Display the image with lines
     for i in range(len(lines_list)):
         cur_line = lines_list[i]
         x1 = cur_line[0]
@@ -145,14 +144,13 @@ def get_first_column(vert_img):
     Return the longest possible (along axis of l1 and l2) numpy matrix (extends past
     the longitudinal bounds of the channel, but is not wider than the channel
     Intended usage: probably somewhere near top-level"""
-    # TODO vert_lines is not working properly
     vert_lines = get_lines(vert_img, 5)  # Transforming old x-coords would be messy
     sorted_vert = sort_by_xpos(vert_lines)  # Now have list of left-to-right sorted vertical lines
     showImage(vert_img)
     lL = sorted_vert[0]
     lR = sorted_vert[1]
-    lx = (float(lL[0]) + float(lL[2]))/2
-    rx = (float(lR[0]) + float(lR[2]))/2
+    lx = (float(lL[0]) + float(lL[2]))/2-5
+    rx = (float(lR[0]) + float(lR[2]))/2+5
     print("lx: " + str(lx))
     print("rx: " + str(rx))
     # lx = (float(l_L[0]) + float(l_L[2]))/2
@@ -187,7 +185,7 @@ def sort_by_xpos(lines_list):
     Return the same list of lines but sorted from left to right """
     x1_list = []
     for l in lines_list:
-        x1_list.append(l[0])
+        x1_list.append(l[0]+l[2])
     keys = np.argsort(x1_list)
     l2r_lineslist = []
     for key in keys:
