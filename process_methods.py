@@ -43,7 +43,6 @@ def get_lines(grayimg, num_chambers):
                     y1 = int(y0 + 10000 * a)
                     x2 = int(x0 - 10000 * (-b))
                     y2 = int(y0 - 10000 * a)
-                    # cv2.line(grayimg, (x1, y1), (x2, y2), (255, 0, 0), 2)
                     line = (x1, y1, x2, y2)
 
                 # Always append the "strongest" line as a starting point, will be found first
@@ -53,7 +52,6 @@ def get_lines(grayimg, num_chambers):
                 # There is at least one line in the list
                 # Check for similar slope before trying to add a line
                 elif len(lines_list) > 0 and ((slope(line))-(slope(lines_list[0]))) <= 1:
-                    # TODO find correct distance here, based on the first line
                     if math.atan(slope(lines_list[0])) > 1:
                         min_dist = np.shape(grayimg)[0]/(num_chambers*4)
                     else:
@@ -76,21 +74,13 @@ def get_lines(grayimg, num_chambers):
                         lines_list.append(line)
                     else:
                         # The line is almost the same of some other line, does not denote a unique boundary
-                        print("found duplicate")
+                        # print("found duplicate")
                         pass
         except Exception as e:
-            print (e)
+            # print (e)
+            pass
         # Relax the parameter used for hough transform (Will cycle again thru "while" if didn't find enough lines)
         hough_param += -2
-
-    # Display the image with lines
-    for i in range(len(lines_list)):
-        cur_line = lines_list[i]
-        x1 = cur_line[0]
-        y1 = cur_line[1]
-        x2 = cur_line[2]
-        y2 = cur_line[3]
-        cv2.line(grayimg, (x1, y1), (x2, y2), (255, 255, 0), 1)
     return lines_list
 
 
@@ -126,6 +116,9 @@ def are_orth(l1, l2):
 
 
 def rotate_to_vert(image, lines_list):
+    # TODO:
+    # can probably keep avg_angle as just the first angle (strongest line)
+    # Finding the proper angle currently one of the weaker parts of program
     rows, cols = image.shape
     tot_angle = float(0)
     for l in lines_list:
@@ -134,7 +127,8 @@ def rotate_to_vert(image, lines_list):
         avg_angle = 0
     else:
         avg_angle = float(tot_angle)/float(len(lines_list))
-    M = cv2.getRotationMatrix2D((float(cols/2), float(rows/2)), -avg_angle, 1)
+    avg_angle = float(math.atan(slope(lines_list[0])))
+    M = cv2.getRotationMatrix2D((float(cols/2), float(rows/2)), float(-avg_angle), 1)
     rotated = cv2.warpAffine(image, M, (cols, rows))
     return rotated
 
@@ -146,27 +140,23 @@ def get_first_column(vert_img):
     Intended usage: probably somewhere near top-level"""
     vert_lines = get_lines(vert_img, 5)  # Transforming old x-coords would be messy
     sorted_vert = sort_by_xpos(vert_lines)  # Now have list of left-to-right sorted vertical lines
-    showImage(vert_img)
     lL = sorted_vert[0]
     lR = sorted_vert[1]
-    lx = (float(lL[0]) + float(lL[2]))/2-5
-    rx = (float(lR[0]) + float(lR[2]))/2+5
-    print("lx: " + str(lx))
-    print("rx: " + str(rx))
+    lx = (float(lL[0]) + float(lL[2]))/2
+    rx = (float(lR[0]) + float(lR[2]))/2
+    # print("lx: " + str(lx))
+    # print("rx: " + str(rx))
     # lx = (float(l_L[0]) + float(l_L[2]))/2
     # rx = (float(l_R[0]) + float(l_R[2]))/2
     try:
-        column = vert_img[:, lx:rx]  # [y1:y2, x1:x2]
-        print("showing column from get_first_column")
-        print("------- vert_lines " + str(vert_lines))
+        column = vert_img[:, lx-3:rx+3]  # [y1:y2, x1:x2]
+        # print("showing column from get_first_column")
+        # print("------- vert_lines " + str(vert_lines))
         showImage(column)
 
-    except TypeError as e:
-        print(e)
-        column = vert_img[:, rx:lx]  # [y1:y2, x1:x2]
-        print("showing column from get_first_column")
-        print("------- vert_lines " + str(vert_lines))
-        showImage(column)
+    except Exception as e:
+        # print(e)
+        column = vert_img[:, rx-3:lx+3]  # [y1:y2, x1:x2]
     return column
 
 
@@ -205,3 +195,14 @@ def slope(l):
         return float("inf")
     else:
         return (float(l[3])-float(l[1]))/(float(l[2])-float(l[0]))
+
+
+def showImage_with_lines(image, lines_list):
+    """ Show an image with a given list of lines applied to it"""
+    for l in lines_list:
+        x1 = l[0]
+        y1 = l[1]
+        x2 = l[2]
+        y2 = l[3]
+        cv2.line(image, (x1, y1), (x2, y2), (255, 255, 0), 1)
+    showImage(image)
