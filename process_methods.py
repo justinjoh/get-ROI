@@ -16,9 +16,6 @@ def get_lines(grayimg, num_chambers):
     http://opencv-python-tutroals.readthedocs.io/en/latest/
     py_tutorials/py_imgproc/py_houghlines/py_houghlines.html
     """
-    # TODO
-    #   make sure that lines are not too close: get order of magnitude
-    #   by dividing by num of channels in the correct direction
 
     # Blur to reduce influence of lines between cells, then get edges
     blurred_grayimg = cv2.medianBlur(grayimg, 5)
@@ -32,6 +29,9 @@ def get_lines(grayimg, num_chambers):
     while len(lines_list) < num_chambers*2:
         lines_list = []  # start list over
         lines = cv2.HoughLines(edges, 1, np.pi/180, hough_param)  # find all lines with relaxed param
+        # TODO
+        # this try/except clause is a clumsy way of avoiding TypeError when lines is initially NoneType
+        # Consider changing
         try:
             for i in range(len(lines)):
                 for rho, theta in lines[i]:
@@ -44,14 +44,17 @@ def get_lines(grayimg, num_chambers):
                     x2 = int(x0 - 10000 * (-b))
                     y2 = int(y0 - 10000 * a)
                     line = (x1, y1, x2, y2)
+                # Now, have candidate line "line". Subject to battery of tests to ensure that "line" is reasonable
 
-                # Always append the "strongest" line as a starting point, will be found first
-                if len(lines_list) == 0:  # Always append the "strongest" line, which is found first
+                # Always append the "strongest" line as a starting point
+                if len(lines_list) == 0:
                     lines_list.append(line)
 
-                # There is at least one line in the list
-                # Check for similar slope before trying to add a line
-                elif len(lines_list) > 0 and ((slope(line))-(slope(lines_list[0]))) <= 1:
+                # Now, there is  least one line in the list
+                # Check for similar slope to first line before trying to add "line"
+                elif len(lines_list) > 0 and (abs((slope(line))-(slope(lines_list[0]))) <= 1 or (abs(slope(line)) > 20
+                                              and abs(slope(lines_list[0])) > 20)):
+                    # determine whether to compare against horiz or vert dim of field
                     if math.atan(slope(lines_list[0])) > 1:
                         min_dist = np.shape(grayimg)[0]/(num_chambers*4)
                     else:
@@ -60,12 +63,12 @@ def get_lines(grayimg, num_chambers):
                     line_not_duplicate = True
                     for lprev in lines_list:
                         # Perform check of line against lprev
-                        # Heuristic: dist between midpts of segment should be greater than min_dist (specified above)
+                        # Heuristic: [dist between midpoints of segment] > [min_dist] (min_dist is specified above)
                         p_line = ((line[0]+line[2])/2, (line[1]+line[3])/2)
                         p_lprev = ((lprev[0]+lprev[2])/2, (lprev[1]+lprev[3])/2)
                         dist = math.sqrt((p_line[0]-p_lprev[0])**2 + (p_line[1]-p_lprev[1])**2)
                         if dist >= min_dist:
-                            # fine against this line
+                            # This line is valid, will append
                             pass
                         else:
                             line_not_duplicate = False
@@ -76,12 +79,14 @@ def get_lines(grayimg, num_chambers):
                         # The line is almost the same of some other line, does not denote a unique boundary
                         # print("found duplicate")
                         pass
+                else:
+                    pass
         except Exception as e:
             # print (e)
             pass
         # Relax the parameter used for hough transform (Will cycle again thru "while" if didn't find enough lines)
         hough_param += -2
-    return lines_list
+    return lines_list[0:num_chambers*2]
 
 
 def with_most_orth(lines_list):
@@ -116,9 +121,7 @@ def are_orth(l1, l2):
 
 
 def rotate_to_vert(image, lines_list):
-    # TODO:
-    # can probably keep avg_angle as just the first angle (strongest line)
-    # Finding the proper angle currently one of the weaker parts of program
+    # TODO can probably keep avg_angle as just the first angle
     rows, cols = image.shape
     tot_angle = float(0)
     for l in lines_list:
@@ -139,6 +142,8 @@ def get_first_column(vert_img):
     the longitudinal bounds of the channel, but is not wider than the channel
     Intended usage: probably somewhere near top-level"""
     vert_lines = get_lines(vert_img, 5)  # Transforming old x-coords would be messy
+    for l in vert_lines:
+        print(slope(l))
     sorted_vert = sort_by_xpos(vert_lines)  # Now have list of left-to-right sorted vertical lines
     lL = sorted_vert[0]
     lR = sorted_vert[1]
@@ -149,30 +154,35 @@ def get_first_column(vert_img):
     # lx = (float(l_L[0]) + float(l_L[2]))/2
     # rx = (float(l_R[0]) + float(l_R[2]))/2
     try:
-        column = vert_img[:, lx-3:rx+3]  # [y1:y2, x1:x2]
+        column = vert_img[:, lx:rx]  # [y1:y2, x1:x2]
         # print("showing column from get_first_column")
         # print("------- vert_lines " + str(vert_lines))
-        showImage(column)
 
     except Exception as e:
         # print(e)
-        column = vert_img[:, rx-3:lx+3]  # [y1:y2, x1:x2]
+        column = vert_img[:, rx:lx]  # [y1:y2, x1:x2]
     return column
 
 
-def get_rect_from_column():
+def get_rect_from_column(column):
     """ Input: column, e.g. from get_column
     Return the column, but cropped at the dead end of the column. """
     # TODO significant work needed with image processing
-    # Image processing stuff will involve finding gradient in longitudinal direction of the column and
-    #
+    # First, find the longitudinal direction of the column
+    z = max(np.shape(column)[0], np.shape(column)[1])  # assumed to be longitudinal direction
+    r = min(np.shape(column)[0], np.shape(column)[1])
+
+    for zpos in range(z):
+        pass
+    # row-by-row? calculate element-wise product along each row, and set some threshold?
+
     raise NotImplementedError
     pass
 
 
 def sort_by_xpos(lines_list):
-    """ Input: valid lines_list, possibly in default format (sorted by confidence)
-    Return the same list of lines but sorted from left to right """
+    """ Input: any valid lines_list, possibly in default format (sorted by confidence)
+    Return the same list of lines but sorted from left to right in image """
     x1_list = []
     for l in lines_list:
         x1_list.append(l[0]+l[2])
