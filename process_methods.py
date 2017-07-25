@@ -136,14 +136,15 @@ def rotate_to_vert(image, lines_list):
     return rotated
 
 
-def get_first_column(vert_img):
-    """ vert_img is properly oriented, l_L and l_R are left and right bounds of a channel
+def get_first_column(vert_img, num_chambers):
+    """ vert_img is properly oriented
     Return the longest possible (along axis of l1 and l2) numpy matrix (extends past
     the longitudinal bounds of the channel, but is not wider than the channel
     Intended usage: probably somewhere near top-level"""
-    vert_lines = get_lines(vert_img, 5)  # Transforming old x-coords would be messy
-    for l in vert_lines:
-        print(slope(l))
+    # TODO: ensure that columns are the correct width
+    # For now, can assume that all chambers are the same size
+
+    vert_lines = get_lines(vert_img, num_chambers)  # Transforming old x-coords would be messy
     sorted_vert = sort_by_xpos(vert_lines)  # Now have list of left-to-right sorted vertical lines
     lL = sorted_vert[0]
     lR = sorted_vert[1]
@@ -153,35 +154,67 @@ def get_first_column(vert_img):
     # print("rx: " + str(rx))
     # lx = (float(l_L[0]) + float(l_L[2]))/2
     # rx = (float(l_R[0]) + float(l_R[2]))/2
-    try:
+    if lx < rx:
         column = vert_img[:, lx:rx]  # [y1:y2, x1:x2]
         # print("showing column from get_first_column")
         # print("------- vert_lines " + str(vert_lines))
-
-    except Exception as e:
-        # print(e)
+    else:
         column = vert_img[:, rx:lx]  # [y1:y2, x1:x2]
     return column
 
 
+def get_column_list(vert_img, num_chambers):
+    """ vert_img is properly oriented
+    Retrieve a list of all columns """
+    columns_list = []
+    for c in range(num_chambers):
+        vert_lines = get_lines(vert_img, num_chambers)
+        sorted_vert = sort_by_xpos(vert_lines)
+        lL = sorted_vert[c]
+        lR = sorted_vert[c+1]
+        lx = (float(lL[0]) + float(lL[2])) / 2
+        rx = (float(lR[0]) + float(lR[2])) / 2
+        if lx < rx:
+            column = vert_img[:, lx:rx]
+        else:
+            column = vert_img[:, rx:lx]
+        columns_list.append(column)
+    return columns_list
+
+
 def get_rect_from_column(column):
-    """ Input: column, e.g. from get_column
+    """ Input: single column containing a chamber, e.g. from get_column
     Return the column, but cropped at the dead end of the column. """
+    # raise NotImplementedError
     # TODO significant work needed with image processing
     # First, find the longitudinal direction of the column
+    # TODO must somehow find the correct direction to run from
     z = max(np.shape(column)[0], np.shape(column)[1])  # assumed to be longitudinal direction
     r = min(np.shape(column)[0], np.shape(column)[1])
+    # Need to change based on which is x and y
 
+    # TODO
+    # using threshold? if so, calculate how?
+    # repetitive code - have this workaround because need to use r, z to index into the column
+    # Save tiny bit of computation time by testing whether z is x/y first, but less compact
+    if z == np.shape(column)[0]:  # z is the x-direction
+        column = np.transpose(column)  # transpose column to avoid indexing issues
+    threshold = np.mean(column)
+    print("threshold: " + str(int(threshold)))
     for zpos in range(z):
-        pass
-    # row-by-row? calculate element-wise product along each row, and set some threshold?
+        row_sum = 0
+        for rpos in range(r):
+            row_sum += column[rpos][zpos]
+        if row_sum/r > threshold/2:
+                # Do something with the z-value
+            print(zpos)
+            return np.transpose(column[:, zpos:z])
 
-    raise NotImplementedError
-    pass
+    # return  # TODO should return the new matrix
 
 
 def sort_by_xpos(lines_list):
-    """ Input: any valid lines_list, possibly in default format (sorted by confidence)
+    """ Input: any valid lines_list, possibly in default format (sorted by decreasing confidence)
     Return the same list of lines but sorted from left to right in image """
     x1_list = []
     for l in lines_list:

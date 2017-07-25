@@ -26,9 +26,13 @@ if __name__ == '__main__':
         showImage_with_lines(f, lines_list)
         xsorted = sort_by_xpos(lines_list)
         rotated = rotate_to_vert(cv2.imread(img_name, cv2.IMREAD_GRAYSCALE), lines_list)
-        showImage_with_lines(rotated, get_lines(rotated, num_chambers=1))
-        firstcol = get_first_column(rotated)
+        showImage_with_lines(rotated, get_lines(rotated, num_chambers=args.NumberOfChambers))
+        firstcol = get_first_column(rotated, num_chambers=args.NumberOfChambers)
         # showImage_with_lines(firstcol, get_lines(firstcol, num_chambers=1))
         showImage(firstcol)
         cv2.imwrite(str(namecounter) + '.png', firstcol)
+
+        rect = get_rect_from_column(firstcol)
+        showImage(rect)
+
         namecounter += 1
