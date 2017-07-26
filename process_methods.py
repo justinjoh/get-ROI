@@ -31,7 +31,7 @@ def get_lines(grayimg, num_chambers):
         lines = cv2.HoughLines(edges, 1, np.pi/180, hough_param)  # find all lines with relaxed param
         # TODO
         # this try/except clause is a clumsy way of avoiding TypeError when lines is initially NoneType
-        # Consider changing
+        # Consider changing it
         try:
             for i in range(len(lines)):
                 for rho, theta in lines[i]:
@@ -76,8 +76,6 @@ def get_lines(grayimg, num_chambers):
                     if line_not_duplicate:
                         lines_list.append(line)
                     else:
-                        # The line is almost the same of some other line, does not denote a unique boundary
-                        # print("found duplicate")
                         pass
                 else:
                     pass
@@ -86,7 +84,7 @@ def get_lines(grayimg, num_chambers):
             pass
         # Relax the parameter used for hough transform (Will cycle again thru "while" if didn't find enough lines)
         hough_param += -2
-    return lines_list[0:num_chambers*2]
+    return lines_list[0:num_chambers*2]#, hough_param
 
 
 def with_most_orth(lines_list):
@@ -136,11 +134,11 @@ def rotate_to_vert(image, lines_list):
     return rotated
 
 
-def get_first_column(vert_img, num_chambers):
+def get_first_column(vert_img, num_chambers, **kwargs):
     """ vert_img is properly oriented
     Return the longest possible (along axis of l1 and l2) numpy matrix (extends past
     the longitudinal bounds of the channel, but is not wider than the channel
-    Intended usage: probably somewhere near top-level"""
+    Unless directly calling for debugging, should be used in get_column_list"""
     # TODO: ensure that columns are the correct width
     # For now, can assume that all chambers are the same size
 
@@ -150,24 +148,34 @@ def get_first_column(vert_img, num_chambers):
     lR = sorted_vert[1]
     lx = (float(lL[0]) + float(lL[2]))/2
     rx = (float(lR[0]) + float(lR[2]))/2
-    # print("lx: " + str(lx))
-    # print("rx: " + str(rx))
-    # lx = (float(l_L[0]) + float(l_L[2]))/2
-    # rx = (float(l_R[0]) + float(l_R[2]))/2
-    if lx < rx:
-        column = vert_img[:, lx:rx]  # [y1:y2, x1:x2]
-        # print("showing column from get_first_column")
-        # print("------- vert_lines " + str(vert_lines))
-    else:
-        column = vert_img[:, rx:lx]  # [y1:y2, x1:x2]
-    return column
+
+    if "determined_chamber_width" not in kwargs:
+        if lx < rx:
+            column = vert_img[:, lx:rx]  # [y1:y2, x1:x2]
+        else:
+            column = vert_img[:, rx:lx]  # [y1:y2, x1:x2]
+        print("width: " + str(abs(rx-lx)))
+        height = np.shape(column)[1]
+        return column, abs(rx-lx), height
+    else:  # "determined_chamber_width" kwarg was passed, i.e. already know what the chamber width is
+        width = kwargs["determined_chamber_width"]
+        if lx < rx:
+            column = vert_img[:, lx:lx+width]
+        else:
+            column = vert_img[:, rx:rx+width]
+        height = np.shape(column)[1]
+        return column, width, height
 
 
-def get_column_list(vert_img, num_chambers):
+def get_column_list(vert_img, num_chambers, **kwargs):
     """ vert_img is properly oriented
-    Retrieve a list of all columns """
+    Return a list of all columns (i.e. numpy matrices)
+    Uses the get_first_column function as a benchmark"""
     columns_list = []
-    for c in range(num_chambers):
+    firstcol, w, h = get_first_column(vert_img, num_chambers)
+    columns_list.append(firstcol)
+    # Now, use the width that has been found to get other chambers
+    for c in range(2, num_chambers*2, 2):
         vert_lines = get_lines(vert_img, num_chambers)
         sorted_vert = sort_by_xpos(vert_lines)
         lL = sorted_vert[c]
@@ -175,42 +183,64 @@ def get_column_list(vert_img, num_chambers):
         lx = (float(lL[0]) + float(lL[2])) / 2
         rx = (float(lR[0]) + float(lR[2])) / 2
         if lx < rx:
-            column = vert_img[:, lx:rx]
+            column = vert_img[:, lx:lx+w]
         else:
-            column = vert_img[:, rx:lx]
+            column = vert_img[:, rx:rx+w]
         columns_list.append(column)
-    return columns_list
+    return columns_list, w, h
 
 
-def get_rect_from_column(column):
+def get_rect_from_column_threshold(column, **kwargs):
     """ Input: single column containing a chamber, e.g. from get_column
-    Return the column, but cropped at the dead end of the column. """
-    # raise NotImplementedError
-    # TODO significant work needed with image processing
+    Return the column, but cropped at the "dead end" of the chamber,
+    and also the length to which other columns will be cropped if not already found.
+    Call with "maxheight" kwarg when already know desired length of chamber
+    Note that this only modifies longitudinal dimension """
     # First, find the longitudinal direction of the column
-    # TODO must somehow find the correct direction to run from
-    z = max(np.shape(column)[0], np.shape(column)[1])  # assumed to be longitudinal direction
+    # TODO also find the correct direction to run from
+    # could simply take "samples" and go in direction with more stuff
+    z = max(np.shape(column)[0], np.shape(column)[1])
     r = min(np.shape(column)[0], np.shape(column)[1])
-    # Need to change based on which is x and y
 
-    # TODO
-    # using threshold? if so, calculate how?
-    # repetitive code - have this workaround because need to use r, z to index into the column
-    # Save tiny bit of computation time by testing whether z is x/y first, but less compact
+    # TODO what might be a better way to calculate threshold?
+    transpose = False
     if z == np.shape(column)[0]:  # z is the x-direction
+        transpose = True
         column = np.transpose(column)  # transpose column to avoid indexing issues
     threshold = np.mean(column)
-    print("threshold: " + str(int(threshold)))
+    print("get_rect_from_column threshold: " + str(int(threshold)))
     for zpos in range(z):
         row_sum = 0
         for rpos in range(r):
-            row_sum += column[rpos][zpos]
+            p = column[rpos][zpos]
+            row_sum += p
+            # TODO get rid of this and replace with something more robust for avoiding text
+            if p >= .9*np.amax(column):
+                row_sum += -(r*np.mean(column))
         if row_sum/r > threshold/2:
-                # Do something with the z-value
-            print(zpos)
-            return np.transpose(column[:, zpos:z])
+            # Now know where the boundary is
+            if "maxheight" in kwargs:
+                print('a')
+                h = kwargs["maxheight"]
+                if transpose:
+                    print('b')
+                    print(np.shape(np.transpose(column[:, zpos:zpos+h])))
+                    return np.transpose(column[:, zpos:zpos+h])
+                else:
+                    return column[:, zpos:zpos+h]
+            else:
+                if transpose:
+                    print('d')
+                    return np.transpose(column[:, zpos::])
+                else:
+                    return column[:, zpos::]
 
-    # return  # TODO should return the new matrix
+
+def get_rect_from_column_houghmethod(column, hough_param):
+    """ Input: single column containing a chamber, e.g. from get_column
+    Return the column, but cropped at the dead end of the chamber.
+    Attempts hough line transform at hough parameter that was successful in get_lines """
+    raise NotImplementedError
 
 
 def sort_by_xpos(lines_list):
@@ -229,6 +259,12 @@ def sort_by_xpos(lines_list):
 def showImage(image):
     cv2.imshow('showImage', image)
     cv2.waitKey(0)
+    cv2.destroyAllWindows()
+
+
+def showQuickly(image):
+    cv2.imshow('showQuickly', image)
+    cv2.waitKey(150)
     cv2.destroyAllWindows()
 
 
