@@ -198,6 +198,8 @@ def get_rect_from_column_threshold(column, **kwargs):
     Note that this only modifies longitudinal dimension """
     # First, find the longitudinal direction of the column
     # TODO also find the correct direction to run from
+    # Actually maybe not - should not have to account for 180 degree turns
+    # Could run horizontal hough single time and find "center" of image, though
     # could simply take "samples" and go in direction with more stuff
     z = max(np.shape(column)[0], np.shape(column)[1])
     r = min(np.shape(column)[0], np.shape(column)[1])
@@ -220,17 +222,13 @@ def get_rect_from_column_threshold(column, **kwargs):
         if row_sum/r > threshold/2:
             # Now know where the boundary is
             if "maxheight" in kwargs:
-                print('a')
                 h = kwargs["maxheight"]
                 if transpose:
-                    print('b')
-                    print(np.shape(np.transpose(column[:, zpos:zpos+h])))
                     return np.transpose(column[:, zpos:zpos+h])
                 else:
                     return column[:, zpos:zpos+h]
             else:
                 if transpose:
-                    print('d')
                     return np.transpose(column[:, zpos::])
                 else:
                     return column[:, zpos::]
@@ -264,7 +262,7 @@ def showImage(image):
 
 def showQuickly(image):
     cv2.imshow('showQuickly', image)
-    cv2.waitKey(150)
+    cv2.waitKey(250)
     cv2.destroyAllWindows()
 
 

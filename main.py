@@ -1,13 +1,10 @@
 """Create a new folder of images that consist of only the cell chamber
 Name of save folder is specified in commandline"""
-import sys
+
 import os
-import cv2
-import numpy as np
-
 from process_methods import *
-
 import argparse
+
 parser = argparse.ArgumentParser()
 parser.add_argument("NumberOfChambers", help="The number of chambers that are in the images",
                     type=int)
@@ -40,18 +37,18 @@ def get_file_list():
 def process_single(fname, **kwargs):
     """ Return a list of np matrices for one image.
     Call with kwargs width and height if dimensions of chamber known"""
-    # TODO distinction between pixel and actual dimensions
+    # TODO distinction somewhere between pixel and actual dimensions
     #   Might not be within this function
-    numchambers = args.NumberOfChambers
-    # TODO put this in later location
     nplist_from_single = []  # will return this
     f = cv2.imread(fname, cv2.IMREAD_GRAYSCALE)  # Need grayscale for Hough line transform
+    numchambers = args.NumberOfChambers
     lines_list = get_lines(f, num_chambers=numchambers)
     rotated = rotate_to_vert(f, lines_list)
     hlist = []
     rlist = []
     # Case 1: neither width nor height known
-    # TODO this is computationally wasteful, consider adding function to find maxheight
+    # TODO possibly computationally expensive calling get_rect_ twice,
+    #    consider adding separate function to find maxheight
     if "width" not in kwargs and "height" not in kwargs:
         print("neither width nor height specified for " + str(fname))
         column_list, w, h = get_column_list(rotated, num_chambers=numchambers)
@@ -70,17 +67,32 @@ def process_single(fname, **kwargs):
             rlist.append(r)
         return rlist, kwargs["width"], kwargs["height"]
     else:  # if one specified and not the other
-        raise NotImplementedError, "process_single: specify either both height and width or neither"
+        raise NotImplementedError, "process_single: for now, must specify " \
+                                   "either both height and width or neither"
 
 
 if __name__ == '__main__':
     # TODO should call with kwargs at some point
-    # TODO figure out how to handle text better
+    # TODO figure out how to handle text better:
+    # total variance? or maybe total percentage of pixels over certain level
+    # TODO must save in correct folder/subfolder
+    # TODO consider global constants for height/width once found
     flist = get_file_list()
     if not os.path.exists(args.SaveFolderName):
         os.makedirs(args.SaveFolderName)
+    # Make folders ahead of time
+    for i in range(args.NumberOfChambers):
+        p = args.SaveFolderName + "/" + args.SaveFolderName + str(i)
+        if not os.path.exists(p):
+            os.makedirs(p)
+    j = 0  # counter for image number
     for img_name in flist:
-        matlist, _, _ = process_single(img_name)
+        matlist, w, h = process_single(img_name)
+        k = 0  # counter for chamber number
         for l in matlist:
             showQuickly(l)
+            loc = os.getcwd() + "/" + args.SaveFolderName + "/" + args.SaveFolderName + str(k)
+            cv2.imwrite(loc + "/" + str(j) + ".png", l)
+            k += 1
+        j += 1
     pass
