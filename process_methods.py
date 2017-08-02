@@ -160,19 +160,22 @@ def get_first_column(vert_img, num_chambers, **kwargs):
     else:  # "determined_chamber_width" kwarg was passed, i.e. already know what the chamber width is
         width = kwargs["determined_chamber_width"]
         if lx < rx:
-            column = vert_img[:, lx:lx+width]
+            column = vert_img[:, lx-1:lx+width+1]
         else:
-            column = vert_img[:, rx:rx+width]
+            column = vert_img[:, rx-1:rx+width+1]
         height = np.shape(column)[1]
         return column, width, height
 
 
 def get_column_list(vert_img, num_chambers, **kwargs):
-    """ vert_img is properly oriented
-    Return a list of all columns (i.e. numpy matrices)
-    Uses the get_first_column function as a benchmark"""
+    """ Return a list of all columns (i.e. numpy matrices)
+    vert_img should already be properly oriented
+    Uses the get_first_column function as the standard """
     columns_list = []
     firstcol, w, h = get_first_column(vert_img, num_chambers)
+    # Give option to use an already-determined width
+    if "width" in kwargs:
+        w = kwargs["width"]
     columns_list.append(firstcol)
     # Now, use the width that has been found to get other chambers
     for c in range(2, num_chambers*2, 2):
@@ -183,9 +186,9 @@ def get_column_list(vert_img, num_chambers, **kwargs):
         lx = (float(lL[0]) + float(lL[2])) / 2
         rx = (float(lR[0]) + float(lR[2])) / 2
         if lx < rx:
-            column = vert_img[:, lx:lx+w]
+            column = vert_img[:, lx-1:lx+w+1]
         else:
-            column = vert_img[:, rx:rx+w]
+            column = vert_img[:, rx-1:rx+w+1]
         columns_list.append(column)
     return columns_list, w, h
 
@@ -212,27 +215,20 @@ def get_rect_from_column_threshold(column, **kwargs):
     threshold = np.mean(column)
     print("get_rect_from_column threshold: " + str(int(threshold)))
     for zpos in range(z):
-        row_sum = 0
-        for rpos in range(r):
-            p = column[rpos][zpos]
-            row_sum += p
-            # TODO get rid of this and replace with something more robust for avoiding text
-            if p >= .9*np.amax(column):
-                row_sum += -(r*np.mean(column))
-        if row_sum/r > threshold/2:
-            # Now know where the boundary is
-            if "maxheight" in kwargs:
-                h = kwargs["maxheight"]
-                if transpose:
-                    return np.transpose(column[:, zpos:zpos+h])
+        row = column[0:r][zpos]
+        if ensure_not_text(row) and row_mean > threshold/2:
+            # Now know where boundary is
+                if "maxheight" in kwargs:
+                    h = kwargs["maxheight"]
+                    if transpose:
+                        return np.transpose(column[:, zpos:zpos+h])
+                    else:
+                        return column[:, zpos:zpos+h]
                 else:
-                    return column[:, zpos:zpos+h]
-            else:
-                if transpose:
-                    return np.transpose(column[:, zpos::])
-                else:
-                    return column[:, zpos::]
-
+                    if transpose:
+                        return np.transpose(column[:, zpos::])
+                    else:
+                        return column[:, zpos::]
 
 def get_rect_from_column_houghmethod(column, hough_param):
     """ Input: single column containing a chamber, e.g. from get_column
@@ -267,7 +263,7 @@ def showQuickly(image):
 
 
 def slope(l):
-    """ Return the slope of line. If vertical, return infinity float """
+    """ Return the slope of line 4-tuple. If vertical, return infinity float """
     if l[2] == l[0]:
         return float("inf")
     else:
@@ -283,3 +279,14 @@ def showImage_with_lines(image, lines_list):
         y2 = l[3]
         cv2.line(image, (x1, y1), (x2, y2), (255, 255, 0), 1)
     showImage(image)
+
+
+def ensure_not_text(transverse_set):
+    """ Return true iff the encountered segment (aligned in transverse direction) does not appear to be text.
+    Likely not useful with raw images, but not computationally expensive either.
+    heuristic: max colors should not be too small/large"""
+    set_max = np.max(transverse_set)
+    if set_max >= 254:  # Highly unlikely that near-abs white appears in normal fluo. microscopy images
+        return False
+    return True
+    pass
