@@ -84,7 +84,7 @@ def get_lines(grayimg, num_chambers):
             pass
         # Relax the parameter used for hough transform (Will cycle again thru "while" if didn't find enough lines)
         hough_param += -2
-    return lines_list[0:num_chambers*2]#, hough_param
+    return lines_list[0:num_chambers*2]  # hough_param
 
 
 def with_most_orth(lines_list):
@@ -207,6 +207,9 @@ def get_rect_from_column_threshold(column, **kwargs):
     z = max(np.shape(column)[0], np.shape(column)[1])
     r = min(np.shape(column)[0], np.shape(column)[1])
 
+    if is_upside_down(column):  # If column is "upside down" then just flip along longitudinal axis
+        column = column[:][::-1]
+
     # TODO what might be a better way to calculate threshold?
     transpose = False
     if z == np.shape(column)[0]:  # z is the x-direction
@@ -290,3 +293,34 @@ def ensure_not_text(transverse_set):
         return False
     return True
     pass
+
+
+def is_upside_down(column):
+    """ Return true iff the dead end of the chamber is at the bottom of the column """
+    # 1. run horizontal hough a single time:
+    edges = cv2.Canny(column, 40, 120)
+    hough_param = 220
+    found = False
+    x, y = np.shape(column)
+    while not found:
+        lines = cv2.HoughLines(edges, 1, np.pi/180, hough_param)
+        for i in range(len(lines)):
+            for rho, theta in lines[i]:
+                a = np.cos(theta)
+                b = np.sin(theta)
+                x0 = a * rho
+                y0 = b * rho
+                x1 = int(x0 + 10000 * (-b))
+                y1 = int(y0 + 10000 * a)
+                x2 = int(x0 - 10000 * (-b))
+                y2 = int(y0 - 10000 * a)
+                line = (x1, y1, x2, y2)
+                if abs(slope(line)) <= .2:
+                    zpos = (y1+y2)/2
+                    if zpos >= y/2:
+                        return False
+                    else:
+                        return True
+        hough_param += -1
+    # 2. find the "center" of the image
+    # 3. compare the
