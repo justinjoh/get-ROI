@@ -1,4 +1,5 @@
-""" NOTE: Probably do not actually need any of this
+""" NOTE: Probably do not actually need any of this: equivalent tests have been incorporated into get_lines in
+process_methods.py
 Contains methods used to "clean up" a lines_list, i.e.
 remove lines that are likely not actually there """
 import numpy as np
@@ -19,7 +20,6 @@ def cleanup(lines_list, num_chambers):
             score = score + pairwise_score(l1, l2)
         avgscore = (score/len(lines_list))**-1
         avgscore_list.append(avgscore)
-        print("avgscore: " + str(avgscore))
 
     keylist = np.argsort(avgscore_list)
     i = 0
