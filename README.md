@@ -16,4 +16,4 @@ $ python main.py #chambers save_folder
 Where #chambers is the number of chambers in each image and save_folder is the folder to be created with the 
 segmented chamber images inside.
 
-###### Created in the Lambert Lab (Cornell, Department of Applied and Engineering Physics)
+###### Created in the Lambert Lab (Cornell University, Department of Applied and Engineering Physics)
