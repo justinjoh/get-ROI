@@ -6,6 +6,7 @@ Main usage is in trim.process_single """
 import cv2
 import numpy as np
 import math
+from scipy import ndimage
 # from cleanup_methods import cleanup
 
 
@@ -141,7 +142,6 @@ def get_first_column(vert_img, num_chambers, **kwargs):
     Unless directly calling for debugging, should be used in get_column_list"""
     # TODO: ensure that columns are the correct width
     # For now, can assume that all chambers are the same size
-
     vert_lines = get_lines(vert_img, num_chambers)  # Transforming old x-coords would be messy
     sorted_vert = sort_by_xpos(vert_lines)  # Now have list of left-to-right sorted vertical lines
     lL = sorted_vert[0]
@@ -165,7 +165,6 @@ def get_first_column(vert_img, num_chambers, **kwargs):
             column = vert_img[:, rx-1:rx+width+1]
         height = np.shape(column)[1]
         return column, width, height
-
 
 def get_column_list(vert_img, num_chambers, **kwargs):
     """ Return a list of all columns (i.e. numpy matrices)
@@ -219,7 +218,7 @@ def get_rect_from_column_threshold(column, **kwargs):
     print("get_rect_from_column threshold: " + str(int(threshold)))
     for zpos in range(z):
         row = column[0:r][zpos]
-        if ensure_not_text(row) and row_mean > threshold/2:
+        if ensure_not_text(row) and np.mean(row) > threshold/2:
             # Now know where boundary is
                 if "maxheight" in kwargs:
                     h = kwargs["maxheight"]
@@ -286,8 +285,8 @@ def showImage_with_lines(image, lines_list):
 
 def ensure_not_text(transverse_set):
     """ Return true iff the encountered segment (aligned in transverse direction) does not appear to be text.
-    Likely not useful with raw images, but not computationally expensive either.
-    heuristic: max colors should not be too small/large"""
+    Likely only useful with old datasets with text overlays, but not computationally expensive either.
+    heuristic: very large max colors """
     set_max = np.max(transverse_set)
     if set_max >= 254:  # Highly unlikely that near-abs white appears in normal fluo. microscopy images
         return False
@@ -296,7 +295,7 @@ def ensure_not_text(transverse_set):
 
 
 def is_upside_down(column):
-    """ Return true iff the dead end of the chamber is at the bottom of the column """
+    """Return true iff the dead end of the chamber is at the bottom of the column """
     # 1. run horizontal hough a single time:
     edges = cv2.Canny(column, 40, 120)
     hough_param = 220
@@ -315,12 +314,9 @@ def is_upside_down(column):
                 x2 = int(x0 - 10000 * (-b))
                 y2 = int(y0 - 10000 * a)
                 line = (x1, y1, x2, y2)
-                if abs(slope(line)) <= .2:
-                    zpos = (y1+y2)/2
-                    if zpos >= y/2:
-                        return False
-                    else:
-                        return True
+                if abs(slope(line)) <= .2:  # Have found the edge of the chamber
+                    _, y_com = ndimage.measurements.center_of_mass(column)
+                    zpos = (y2+y1)/2
+                    return zpos <= y_com
         hough_param += -1
-    # 2. find the "center" of the image
-    # 3. compare the
+
