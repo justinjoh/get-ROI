@@ -206,7 +206,8 @@ def get_rect_from_column_threshold(column, **kwargs):
     z = max(np.shape(column)[0], np.shape(column)[1])
     r = min(np.shape(column)[0], np.shape(column)[1])
 
-    if is_upside_down(column):  # If column is "upside down" then just flip along longitudinal axis
+    # TODO is_upside_down not effective yet, avoid using for now
+    if False and is_upside_down(column):  # If column is "upside down" then just flip along longitudinal axis
         column = column[:][::-1]
 
     # TODO what might be a better way to calculate threshold?
@@ -231,6 +232,11 @@ def get_rect_from_column_threshold(column, **kwargs):
                         return np.transpose(column[:, zpos::])
                     else:
                         return column[:, zpos::]
+        else:
+            if zpos == z:
+                print('Did not find edge')
+            pass
+
 
 def get_rect_from_column_houghmethod(column, hough_param):
     """ Input: single column containing a chamber, e.g. from get_column
@@ -260,7 +266,7 @@ def showImage(image):
 
 def showQuickly(image):
     cv2.imshow('showQuickly', image)
-    cv2.waitKey(250)
+    cv2.waitKey(500)
     cv2.destroyAllWindows()
 
 
@@ -288,10 +294,10 @@ def ensure_not_text(transverse_set):
     Likely only useful with old datasets with text overlays, but not computationally expensive either.
     heuristic: very large max colors """
     set_max = np.max(transverse_set)
-    if set_max >= 254:  # Highly unlikely that near-abs white appears in normal fluo. microscopy images
+    if set_max == 255:  # Highly unlikely that near-abs white appears in normal fluo. microscopy images
         return False
-    return True
-    pass
+    else:
+        return True
 
 
 def is_upside_down(column):
@@ -303,20 +309,23 @@ def is_upside_down(column):
     x, y = np.shape(column)
     while not found:
         lines = cv2.HoughLines(edges, 1, np.pi/180, hough_param)
-        for i in range(len(lines)):
-            for rho, theta in lines[i]:
-                a = np.cos(theta)
-                b = np.sin(theta)
-                x0 = a * rho
-                y0 = b * rho
-                x1 = int(x0 + 10000 * (-b))
-                y1 = int(y0 + 10000 * a)
-                x2 = int(x0 - 10000 * (-b))
-                y2 = int(y0 - 10000 * a)
-                line = (x1, y1, x2, y2)
-                if abs(slope(line)) <= .2:  # Have found the edge of the chamber
-                    _, y_com = ndimage.measurements.center_of_mass(column)
-                    zpos = (y2+y1)/2
-                    return zpos <= y_com
+        try:
+            for i in range(len(lines)):
+                for rho, theta in lines[i]:
+                    a = np.cos(theta)
+                    b = np.sin(theta)
+                    x0 = a * rho
+                    y0 = b * rho
+                    x1 = int(x0 + 10000 * (-b))
+                    y1 = int(y0 + 10000 * a)
+                    x2 = int(x0 - 10000 * (-b))
+                    y2 = int(y0 - 10000 * a)
+                    line = (x1, y1, x2, y2)
+                    if abs(slope(line)) <= .2:  # Have found the edge of the chamber
+                        _, y_com = ndimage.measurements.center_of_mass(column)
+                        zpos = (y2+y1)/2
+                        return zpos <= y_com
+        except:
+            pass
         hough_param += -1
 
