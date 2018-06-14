@@ -14,6 +14,7 @@ Put .py files in same directory as the images from the time-lapse sequence.
 
 Run as:
 $ python main.py #chambers save_folder
+
 Where #chambers is the number of chambers in each image and save_folder is the folder to be created with the 
 segmented chamber images inside.
 
